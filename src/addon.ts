@@ -4,24 +4,12 @@ import axios from 'axios';
 import sharp from 'sharp';
 import * as cheerio from 'cheerio';
 import * as dotenv from 'dotenv';
-import { MovieDb, DiscoverTvRequest, DiscoverMovieRequest, TvResult, MovieResult, TrendingRequest, PersonResult } from 'moviedb-promise';
 import * as path from 'path';
+import manifest from './manifest';
 
 
 // Load environment variables from .env file
 dotenv.config();
-
-// Get TMDB API key from environment variable
-const tmdbApiKey = process.env.TMDB_API_KEY;
-
-if (!tmdbApiKey) {
-    throw new Error('TMDB_API_KEY is not defined in the environment variables');
-}
-
-const moviedb = new MovieDb(tmdbApiKey, 'https://api.tmdb.org/3/');
-
-// Load the addon manifest
-const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '../manifest.json'), 'utf-8'));
 
 // Create a new addon builder
 const builder = new addonBuilder(manifest);
@@ -140,8 +128,9 @@ async function getMetadata(imdb: string, type: string): Promise<MetaDetail> {
 
 // Scrape ratings and get posters
 async function scrapeRatings(imdbId: string, type: string): Promise<MetaDetail> {
+    const metadata = await getMetadata(imdbId, type);
     try {
-        const metadata = await getMetadata(imdbId, type);
+       
         const cleanTitle = metadata.name;
         let description = metadata.description || '';
 
@@ -190,7 +179,7 @@ async function scrapeRatings(imdbId: string, type: string): Promise<MetaDetail> 
 
     } catch (error) {
         console.error(`Error fetching ratings: ${(error as Error).message}`);
-        return {} as MetaDetail;
+        return metadata;
     }
 }
 
@@ -209,165 +198,69 @@ builder.defineMetaHandler(async (args: { id: string, type: string }) => {
 });
 
 
+const cinemeta_catalog = 'https://cinemeta-catalogs.strem.io';
 
 // Fetch trending catalog
-async function trendingCatalog(type: string): Promise<any> {
-    const trendingRequest: TrendingRequest = {
-        media_type: type === 'movie' ? 'movie' : 'tv',
-        time_window: 'week'
-    };
+async function trendingCatalog(type: string, extra: any): Promise<any> {
+    const genre = extra?.genre || '';
+    const skip = extra?.skip || 0;
+    const url = `${cinemeta_catalog}/top/catalog/${type}/top/genre=${genre}&skip=${skip}.json`;
+    console.log('Fetching trending catalog:', url);
+    const response = await axios.get(url);
 
-    // Fetch trending data
-    const response = await moviedb.trending(trendingRequest);
-    if (response.results == undefined) {
-        return { metas: [] };
-    }
+    response.data.metas = await Promise.all(response.data.metas.map(async (meta: MetaDetail) => {
+        const metadata = await scrapeRatings(meta.id, type);
+        return metadata;
+    }));
 
-    // Collect all the promises for fetching external IDs
-    const idPromises = response.results.map(async (curr: MovieResult | TvResult | PersonResult) => {
-        if (curr.id == undefined) {
-            return '';
-        }
-        if (trendingRequest.media_type === 'movie') {
-            const movieExternalResult = await moviedb.movieExternalIds({ id: curr.id });
-            if (movieExternalResult.imdb_id == undefined) {
-                return '';
-            }
-            return movieExternalResult.imdb_id;
-        } else {
-            const tvExternalResult = await moviedb.tvExternalIds({ id: curr.id });
-            if (tvExternalResult.imdb_id == undefined) {
-                return '';
-            }
-            return tvExternalResult.imdb_id;
-        }
-    });
-
-    // Resolve all the promises concurrently
-    const ids = (await Promise.all(idPromises)).filter(id => id !== '');
-    // Collect all the promises for scraping ratings
-    const metaPromises = ids.map(id => scrapeRatings(id, type));
-
-    // Resolve all the promises concurrently
-    const metas = await Promise.all(metaPromises);
-
-    return { metas };
+    return response.data; 
 }
 
 // Fetch discover catalog
-async function discoverCatalog(type: string, extra: any): Promise<any> {
-    let page = 0;
-    if (extra?.skip) {
-        page = Math.floor(extra.skip / 20);
-    }
-    let idPromises: Promise<string>[] = [];
-    if (type === 'movie') {
-        const currentDate = new Date();
-        const discoverRequest: DiscoverMovieRequest = {
-            sort_by: extra?.genre || 'popularity.desc',
-            "with_runtime.gte": 30,
-            "release_date.lte": `${currentDate.getFullYear()}-${currentDate.getMonth() + 1}-${currentDate.getDate()}`,
-            page: page + 1
-        };
+async function featuredCataloge(type: string, extra: any): Promise<any> {
+    // https://cinemeta-catalogs.strem.io/imdbRating/catalog/series/imdbRating/genre=actionskip=0.json
+    const genre = extra?.genre || '';
+    const skip = extra?.skip || 0;
+    const url = `${cinemeta_catalog}/imdbRating/catalog/${type}/imdbRating/genre=${genre}&skip=${skip}.json`;
+    console.log('Fetching featured catalog:', url);
+    const response = await axios.get(url);
 
-        const response = await moviedb.discoverMovie(discoverRequest);
-        if (response.results == undefined) {
-            return { metas: [] };
-        }
+    response.data.metas = await Promise.all(response.data.metas.map(async (meta: MetaDetail) => {
+        const metadata = await scrapeRatings(meta.id, type);
+        return metadata;
+    }));
 
-        idPromises = response.results.map(async (curr: MovieResult) => {
-            if (curr.id == undefined) {
-                return '';
-            }
-            const movieExternalResult = await moviedb.movieExternalIds({ id: curr.id });
-            if (movieExternalResult.imdb_id == undefined) {
-                return '';
-            }
-            return movieExternalResult.imdb_id;
-        });
-
-    } else {
-        const discoverRequest: DiscoverTvRequest = {
-            sort_by: extra?.genre || 'popularity.desc',
-            page: page + 1
-        };
-
-        const response = await moviedb.discoverTv(discoverRequest);
-        if (response.results == undefined) {
-            return { metas: [] };
-        }
-
-        idPromises = response.results.map(async (curr: TvResult) => {
-            if (curr.id == undefined) {
-                return '';
-            }
-            const tvExternalResult = await moviedb.tvExternalIds({ id: curr.id });
-            if (tvExternalResult.imdb_id == undefined) {
-                return '';
-            }
-            return tvExternalResult.imdb_id;
-        });
-    }
-
-    // Resolve all the promises concurrently
-    const ids = (await Promise.all(idPromises)).filter(id => id !== '');
-    // Collect all the promises for scraping ratings
-    const metaPromises = ids.map(id => scrapeRatings(id, type));
-
-    // Resolve all the promises concurrently
-    const metas = await Promise.all(metaPromises);
-
-    return { metas };
+    return response.data;
 }
 
 // Fetch search catalog
 async function searchCatalog(type: string, extra: any): Promise<any> {
-    console.log('Search:', extra?.search);
     const query = extra?.search || '';
+    const skip = extra?.skip || 0;
+    const url = `https://v3-cinemeta.strem.io/catalog/${type}/top/search=${query}&skip=${skip}.json`;
+    console.log('Fetching search catalog:', url);
+    const response = await axios.get(url);
 
-    let idPromises: Promise<string>[] = [];
-    if (type === 'movie') {
-        const response = await moviedb.searchMovie({ query });
-        if (response.results == undefined) {
-            return { metas: [] };
-        }
-        idPromises = response.results?.map(async (curr: MovieResult) => {
-            if (curr.id == undefined) {
-                return '';
-            }
-            const movieExternalResult = await moviedb.movieExternalIds({ id: curr.id });
-            if (movieExternalResult.imdb_id == undefined) {
-                return '';
-            }
-            return movieExternalResult.imdb_id;
-        });
+    response.data.metas = await Promise.all(response.data.metas.map(async (meta: MetaDetail) => {
+        const metadata = await scrapeRatings(meta.id, type);
+        return metadata;
+    }));
 
-    } else {
-        const response = await moviedb.searchTv({ query });
-        if (response.results == undefined) {
-            return { metas: [] };
-        }
-        idPromises = response.results.map(async (curr: TvResult) => {
-            if (curr.id == undefined) {
-                return '';
-            }
-            const tvExternalResult = await moviedb.tvExternalIds({ id: curr.id });
-            if (tvExternalResult.imdb_id == undefined) {
-                return '';
-            }
-            return tvExternalResult.imdb_id;
-        });
-    }
+    return response.data;
+}
 
-    // Resolve all the promises concurrently
-    const ids = (await Promise.all(idPromises)).filter(id => id !== '');
-    // Collect all the promises for scraping ratings
-    const metaPromises = ids.map(id => scrapeRatings(id, type));
+// Fetch the best year by year catalog
+async function bestYearByYearCatalog(type: string, extra: any): Promise<any> {
+    const year = extra?.genre || new Date().getFullYear();
+    const skip = extra?.skip || 0;
+    const response = await axios.get(`${cinemeta_catalog}/year/catalog/${type}/year/genre=${year}&skip=${skip}.json`);
 
-    // Resolve all the promises concurrently
-    const metas = await Promise.all(metaPromises);
+    response.data.metas = await Promise.all(response.data.metas.map(async (meta: MetaDetail) => {
+        const metadata = await scrapeRatings(meta.id, type);
+        return metadata;
+    }));
 
-    return { metas };
+    return response.data;
 }
 
 // Define the catalog handler for the addon
@@ -376,11 +269,13 @@ builder.defineCatalogHandler(async (args: Args) => {
     const { type, id: catalogId, extra } = args;
 
     if (catalogId === 'trending') {
-        return trendingCatalog(type);
-    } else if (catalogId === 'discover') {
-        return discoverCatalog(type, extra);
+        return trendingCatalog(type, extra);
+    } else if (catalogId === 'featured') {
+        return featuredCataloge(type, extra);
     } else if (catalogId === 'search') {
         return searchCatalog(type, extra);
+    } else if (catalogId === 'best_yoy') {
+        return bestYearByYearCatalog(type, extra);
     }
 });
 
