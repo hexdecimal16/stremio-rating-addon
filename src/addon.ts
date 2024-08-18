@@ -20,7 +20,6 @@ if (!tmdbApiKey) {
 
 const moviedb = new MovieDb(tmdbApiKey, 'https://api.tmdb.org/3/');
 
-
 // Load the addon manifest
 const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '../manifest.json'), 'utf-8'));
 
@@ -384,5 +383,5 @@ builder.defineCatalogHandler(async (args: Args) => {
 });
 
 // Start the HTTP server
-serveHTTP(builder.getInterface(), { port: 7000 });
+serveHTTP(builder.getInterface(), { port: Number(process.env.PORT) || 7000 });
 
