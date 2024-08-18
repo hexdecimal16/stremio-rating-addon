@@ -8,6 +8,10 @@ This Stremio addon fetches and displays ratings from multiple sources like IMDb,
 - Overlay ratings on posters.
 - Support for trending and discover catalogs.
 
+## Screenshots
+
+![Screenshot 1](https://github.com/hexdecimal16/stremio-rating-addon/blob/main/assets/screenshot1.png)
+
 ## Installation
 
 ### Prerequisites
