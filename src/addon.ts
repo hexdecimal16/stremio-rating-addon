@@ -139,8 +139,13 @@ async function scrapeRatings(imdbId: string, type: string): Promise<MetaDetail> 
             return metadata;
         }
 
+        const headers = {
+            "cache-control": "no-cache",
+            "referer": "https://www.google.com/",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
+        }
         const url = `https://www.google.com/search?q=${encodeURIComponent(cleanTitle)} - ${type}`;
-        const response = await axios.get(url);
+        const response = await axios.get(url, { headers });
         const $ = cheerio.load(response.data);
 
         let ratingsDiv = $('div.Ap5OSd').first();
