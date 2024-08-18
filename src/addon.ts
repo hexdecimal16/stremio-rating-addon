@@ -31,10 +31,9 @@ async function addRatingToImage(base64String: string, ratingMap: { [key: string]
         // Remove base64 metadata and convert to buffer
         const base64Data = base64String.replace(/^data:image\/jpeg;base64,/, "");
         const imageBuffer = Buffer.from(base64Data, 'base64');
-
+        
         // Validate image using sharp
         await sharp(imageBuffer).metadata()
-        
 
         const image = sharp(imageBuffer);
         const { width: imageWidth, height: imageHeight } = await image.metadata();
@@ -60,13 +59,13 @@ async function addRatingToImage(base64String: string, ratingMap: { [key: string]
         for (const [key, value] of Object.entries(ratingMap)) {
             let svgFilePath: string | undefined;
             if (key === 'metacritic') {
-                svgFilePath = path.join(__dirname, 'assets', 'metacritic.svg');
+                svgFilePath = path.join(__dirname, '../assets', 'metacritic.svg');
             } else if (key === 'imdb') {
-                svgFilePath = path.join(__dirname, 'assets', 'imdb.svg');
+                svgFilePath = path.join(__dirname, '../assets', 'imdb.svg');
             } else if (key === 'rotten_tomatoes') {
                 svgFilePath = value > '60'
-                    ? path.join(__dirname, 'assets', 'rt_fresh.svg')
-                    : path.join(__dirname, 'assets', 'rt_rotten.svg');
+                    ? path.join(__dirname, '../assets', 'rt_fresh.svg')
+                    : path.join(__dirname, '../assets', 'rt_rotten.svg');
             }
 
             if (svgFilePath) {
@@ -107,6 +106,9 @@ async function addRatingToImage(base64String: string, ratingMap: { [key: string]
         svgText += ratingSvgs;
 
         svgText += '</svg>';
+
+        // save the svg to a file
+        fs.writeFileSync('rating.svg', svgText);
 
         // Ensure SVG overlay is not empty
         if (svgText === `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" version="1.1"></svg>`) {
@@ -173,14 +175,14 @@ async function scrapeRatings(imdbId: string, type: string): Promise<MetaDetail> 
                 score = score.split('%')[0];
             }
             ratingMap[source] = score;
+            ratingText += `(${source}: ${score}) `;
         });
-        // Add descriptions to metadata
-        const scrapeTitle = $('h2.LL6Nsc').first();
-        if (scrapeTitle && scrapeTitle.text()) {
-            description += `\nRating Source: ${scrapeTitle.text()}`;
-        }
+        description += ` ${ratingText}`;
 
         if (metadata.poster) {
+            const response = await axios.get(metadata.poster, { responseType: 'arraybuffer' });
+            const posterBase64 = Buffer.from(response.data).toString('base64');
+            metadata.poster = `data:image/jpeg;base64,${posterBase64}`;
             const modifiedPoster = await addRatingToImage(metadata.poster, ratingMap);
             metadata.poster = modifiedPoster;
         }
