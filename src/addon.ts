@@ -157,7 +157,15 @@ async function scrapeRatings(imdbId: string, type: string): Promise<MetaDetail> 
             return metadata;
         }
         let ratingsText = ratingsDiv.text();
+        console.log('Ratings text:', ratingsText);
         let ratings = ratingsText.split('\n').map(r => r.split('�')).filter(r => r.length > 1);
+        if (ratings.length === 0) {
+            ratings = ratingsText.split('\n').map(r => r.split('·')).filter(r => r.length > 1);
+        }
+        if (ratings.length === 0) {
+            console.error('Ratings not found');
+            return metadata;
+        }
         ratings.forEach(rating => {
             let source = rating[1].trim().replace(" ", "_").toLowerCase();
             let score = rating[0].trim();
@@ -170,6 +178,7 @@ async function scrapeRatings(imdbId: string, type: string): Promise<MetaDetail> 
             ratingText += `(${source}: ${score}) `;
         });
         description += ` ${ratingText}`;
+        console.log('Ratings:', ratingMap);
 
         if (metadata.poster) {
             const response = await axios.get(metadata.poster, { responseType: 'arraybuffer' });
