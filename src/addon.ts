@@ -33,7 +33,7 @@ async function addRatingToImage(base64String: string, ratingMap: { [key: string]
         const imageBuffer = Buffer.from(base64Data, 'base64');
         
         // Validate image using sharp
-        await sharp(imageBuffer).metadata()
+        await sharp(imageBuffer).metadata();
 
         const image = sharp(imageBuffer);
         const { width: imageWidth, height: imageHeight } = await image.metadata();
@@ -46,13 +46,14 @@ async function addRatingToImage(base64String: string, ratingMap: { [key: string]
 
         // Define SVG dimensions and padding
         const svgWidth = imageWidth;  // Set SVG width to the image width
-        const padding = 20;
-        const itemWidth = 100; // Width for each rating item
-        const itemHeight = 50; // Height for each rating item
+        const paddingX = Math.floor(imageWidth / 15); // Padding between rating items
+        const paddingY = Math.floor(imageHeight / 25); // Padding between rating items
+        const itemWidth = Math.floor(imageWidth / 4); // Width for each rating item
+        const itemHeight = Math.floor(itemWidth / 3); // Height for each rating item
 
         // Add rating publisher source image and score
-        let xOffset = padding; // Initial x offset for the first item
-        let yOffset = padding; // y offset for the row
+        let xOffset = paddingX; // Initial x offset for the first item
+        let yOffset = paddingY; // y offset for the row
 
         let ratingSvgs = '';
         let totalRatings = 0;
@@ -73,16 +74,20 @@ async function addRatingToImage(base64String: string, ratingMap: { [key: string]
                 const svgBase64 = svgBuffer.toString('base64');
                 const svgImage = `data:image/svg+xml;base64,${svgBase64}`;
 
-                ratingSvgs += `<image x="${xOffset}" y="${yOffset}" width="${itemHeight}" height="${itemHeight}" xlink:href="${svgImage}" />`;
-                ratingSvgs += `<text x="${xOffset + itemHeight + 10}" y="${yOffset + itemHeight / 2}" font-size="20" fill="white" text-anchor="start" alignment-baseline="middle">${value}</text>`;
+                // Add SVG image and text to the overlay
+                ratingSvgs += `
+                    <g transform="translate(${xOffset}, ${yOffset})">
+                        <image width="${itemHeight}" height="${itemHeight}" xlink:href="${svgImage}" />
+                        <text x="${itemHeight + 10}" y="${itemHeight}" font-size="28" font-weight="600" fill="white" text-anchor="start" dominant-baseline="end">${value}</text>
+                    </g>`;
 
                 // Update xOffset for the next item
-                xOffset += itemWidth;
+                xOffset += itemWidth + paddingX;
 
                 // If xOffset exceeds SVG width, move to the next row
                 if (xOffset + itemWidth > svgWidth) {
-                    xOffset = padding;
-                    yOffset += itemHeight + padding;
+                    xOffset = paddingX;
+                    yOffset += itemHeight + paddingY;
                 }
 
                 // Update total ratings
@@ -91,7 +96,7 @@ async function addRatingToImage(base64String: string, ratingMap: { [key: string]
         }
 
         // Calculate SVG height based on the number of rows
-        const svgHeight = (yOffset + itemHeight + padding) * Math.ceil(totalRatings / 3) + padding;
+        const svgHeight = yOffset + itemHeight + paddingY;
 
         // Adjust yOffset to place the overlay at the bottom of the image
         const overlayTopPosition = imageHeight - svgHeight;
@@ -99,13 +104,9 @@ async function addRatingToImage(base64String: string, ratingMap: { [key: string]
         let svgText = `
         <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" version="1.1">
             <!-- Semi-transparent background -->
-            <rect x="0" y="0" width="${svgWidth}" height="${svgHeight}" fill="rgba(0, 0, 0, 0.5)" />
-        `;
-
-        // Add rating items to the SVG
-        svgText += ratingSvgs;
-
-        svgText += '</svg>';
+            <rect x="0" y="0" width="${svgWidth}" height="${svgHeight}" fill="rgba(0, 0, 0, 0.75)" />
+            ${ratingSvgs}
+        </svg>`;
 
         // Ensure SVG overlay is not empty
         if (svgText === `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" version="1.1"></svg>`) {
@@ -195,6 +196,7 @@ async function scrapeRatings(imdbId: string, type: string): Promise<MetaDetail> 
 
 // Define the "meta" resource
 builder.defineMetaHandler(async (args: { id: string, type: string }) => {
+    console.log('Received meta request:', args);
     const { id, type } = args;
     let metadata: MetaDetail = {} as MetaDetail;
     if (id.startsWith('tt')) {
@@ -202,6 +204,7 @@ builder.defineMetaHandler(async (args: { id: string, type: string }) => {
         metadata = await scrapeRatings(imdbId, type);
     }
 
+    console.log('Finished meta request:', metadata);
     return { meta: metadata };
 });
 
