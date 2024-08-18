@@ -383,5 +383,9 @@ builder.defineCatalogHandler(async (args: Args) => {
 });
 
 // Start the HTTP server
-serveHTTP(builder.getInterface(), { port: Number(process.env.PORT) || 7000 });
+const port = Number(process.env.PORT) || 7000;
+serveHTTP(builder.getInterface(), { port });
+
+console.log(`🚀 Link for addon http://localhost:${port}`);
+console.log(`🚀 Link for manifest http://localhost:${port}/manifest.json`);
 
