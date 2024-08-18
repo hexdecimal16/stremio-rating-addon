@@ -107,9 +107,6 @@ async function addRatingToImage(base64String: string, ratingMap: { [key: string]
 
         svgText += '</svg>';
 
-        // save the svg to a file
-        fs.writeFileSync('rating.svg', svgText);
-
         // Ensure SVG overlay is not empty
         if (svgText === `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" version="1.1"></svg>`) {
             throw new Error('SVG overlay is empty');
