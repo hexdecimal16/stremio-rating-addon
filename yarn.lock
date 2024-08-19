@@ -167,6 +167,11 @@
   resolved "https://registry.npmjs.org/@tsconfig/node16/-/node16-1.0.4.tgz"
   integrity sha512-vxhUy4J8lyeyinH7Azl1pdd43GJhZH/tP2weN8TntQblOY+A0XbT8DJk1/oCPuOOyg/Ja757rG0CgHcWC8OfMA==
 
+"@types/fake-useragent@^1.0.0":
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/@types/fake-useragent/-/fake-useragent-1.0.0.tgz#6600b6125f7d924c2d4597dda30e9ede4b2723ee"
+  integrity sha512-T+GsW6umr2E27FwubiKrPsjIyqx526AQH1dc1Sky31EnVW5YJ4aNV/KCWeCr9LBioSMGHi7zjNxAteHPQtzeDw==
+
 "@types/node-fetch@^2.6.4":
   version "2.6.11"
   resolved "https://registry.npmjs.org/@types/node-fetch/-/node-fetch-2.6.11.tgz"
@@ -707,6 +712,11 @@ external-editor@^3.0.3:
     chardet "^0.7.0"
     iconv-lite "^0.4.24"
     tmp "^0.0.33"
+
+fake-useragent@^1.0.1:
+  version "1.0.1"
+  resolved "https://registry.yarnpkg.com/fake-useragent/-/fake-useragent-1.0.1.tgz#ec7a5d93b4a65118fa6f85c68e9ddef5312c381a"
+  integrity sha512-BOQh1TM//DhrVaeZ+b3w3s4E40rfYcDTn5aoSM2w1xVsZVGglNOzPR5H8KDO8NmF8sT4ppxyb4/MHGIHfZsVDA==
 
 figures@^2.0.0:
   version "2.0.0"
