@@ -149,8 +149,6 @@ async function getRatingsFromGoogle(axiosInstance: AxiosInstance, query: string)
             throw error;
         }
         throw new Error('Google blocked');
-    } finally {
-        console.log('Google request completed');
     }
     const html = response.data;
     const $ = cheerio.load(html);
@@ -158,9 +156,7 @@ async function getRatingsFromGoogle(axiosInstance: AxiosInstance, query: string)
     let ratingsDiv = $('div.Ap5OSd').first();
     const ratingMap: { [key: string]: string } = {};
 
-    console.log(`Google Ratings div for ${query}:`, ratingsDiv.length);
     const ratingsText = ratingsDiv.text();
-    console.log('Google Ratings text:', ratingsText);
     let ratings = ratingsText.split('\n').map(r => r.split('�')).filter(r => r.length > 1);
     if (ratings.length === 0) {
         ratings = ratingsText.split('\n').map(r => r.split('·')).filter(r => r.length > 1);
@@ -181,7 +177,7 @@ async function getRatingsFromGoogle(axiosInstance: AxiosInstance, query: string)
         ratingMap[sourceKey] = score;
     });
 
-    console.log('Rating map:', ratingMap);
+    console.log('Got Google ratings:', ratingMap);
     return ratingMap;
 }
 
@@ -192,7 +188,6 @@ async function getRatingsFromBing(axiosInstance: AxiosInstance, query: string): 
 
     query = query.replace(/ /g, '+');
     const url = `https://www.bing.com/search?q=${query}`;
-    console.log('Bing URL:', url);
     const response = await axiosInstance.get(url, { headers });
     const html = response.data;
     const $ = cheerio.load(html);
@@ -218,7 +213,31 @@ async function getRatingsFromBing(axiosInstance: AxiosInstance, query: string): 
         ratingMap[sourceKey] = rating;
     });
 
-    console.log('Rating map:', ratingMap);
+    console.log('Got Bing ratings:', ratingMap);
+    return ratingMap;
+}
+
+async function getRatingsFromYahoo(axiosInstance: AxiosInstance, query: string): Promise<{ [key: string]: string }> {
+    const headers = {
+        'User-Agent': fakeUa()
+    };
+    const url = `https://search.yahoo.com/search?p=${query}`;
+
+    const response = await axiosInstance.get(url, { headers });
+    const html = response.data;
+    const $ = cheerio.load(html);
+    const ratingMap: { [key: string]: string } = {};
+
+    // get span with class "rottenTomatoes"
+    const rottenTomatoes = $('span.rottenTomatoes');
+    if (rottenTomatoes.length > 0) {
+        const score = rottenTomatoes.text().split('%')[0].trim();
+        ratingMap['rotten_tomatoes'] = score;
+    } else {
+        throw new Error('Rotten Tomatoes rating not found');
+    }
+
+    console.log('Got Yahoo ratings:', ratingMap);
     return ratingMap;
 }
 
@@ -232,7 +251,6 @@ function firstResolved<T>(promises: Promise<T>[]): Promise<T> {
                 .then(resolve)
                 .catch((error) => {
                     errors.push(error);
-                    console.error("Promise rejected with error:", error);
 
                     // If all promises have been rejected, reject the main promise
                     if (errors.length === total) {
@@ -261,10 +279,20 @@ async function scrapeRatings(imdbId: string, type: string, axiosInstance?: Axios
         }
 
         const query = `${cleanTitle} - ${type}`;
-        let ratingMap = await firstResolved([
-            getRatingsFromBing(axiosInstance, query),
-            getRatingsFromGoogle(axiosInstance, query)
-        ]);
+        let ratingMap: { [key: string]: string } = {};
+        let yahooFallback = false;
+        try {
+            ratingMap = await firstResolved([
+                getRatingsFromBing(axiosInstance, query),
+                getRatingsFromGoogle(axiosInstance, query),
+            ]);
+        } catch (error) {
+            yahooFallback = true;
+        }
+
+        if (yahooFallback) {
+            ratingMap = await getRatingsFromYahoo(axiosInstance, query);
+        }
 
         for (const [key, value] of Object.entries(ratingMap)) {
             description += `(${key.replace("_", " ")}: ${value}) `;
