@@ -13,7 +13,9 @@
     "cheerio": "^1.0.0",
     "dotenv": "^16.4.5",
     "fake-useragent": "^1.0.1",
+    "hpagent": "^1.2.0",
     "openai": "^4.0.0",
+    "puppeteer": "^23.1.0",
     "sharp": "^0.33.5",
     "stremio-addon-sdk": "^1.6.10"
   },

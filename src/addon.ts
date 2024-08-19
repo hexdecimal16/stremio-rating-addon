@@ -1,18 +1,13 @@
 import { addonBuilder, serveHTTP, Args, MetaDetail } from 'stremio-addon-sdk';
 import * as fs from 'fs';
-import axios, { AxiosError, AxiosInstance, AxiosResponse } from 'axios';
+import axios, { AxiosError } from 'axios';
 import sharp from 'sharp';
 import * as cheerio from 'cheerio';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import manifest from './manifest';
 import fakeUa from 'fake-useragent'
-
-
-// TODO: set proxy in future
-async function setProxy(): Promise<AxiosInstance> {
-    return axios.create({});
-}
+import { fetchNetwork } from './network';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -121,10 +116,10 @@ async function addRatingToImage(base64String: string, ratingMap: { [key: string]
     }
 }
 
-async function getMetadata(axiosInstance: AxiosInstance, imdb: string, type: string): Promise<MetaDetail> {
+async function getMetadata(imdb: string, type: string): Promise<MetaDetail> {
     try {
         const url = `https://v3-cinemeta.strem.io/meta/${type}/${imdb}.json`;
-        const response = await axiosInstance.get(url)
+        const response = await axios.get(url)
         return response.data.meta;
     } catch (error) {
         console.error(`Error fetching metadata: ${(error as Error).message}`);
@@ -132,26 +127,13 @@ async function getMetadata(axiosInstance: AxiosInstance, imdb: string, type: str
     }
 }
 
-async function getRatingsFromGoogle(axiosInstance: AxiosInstance, query: string): Promise<{ [key: string]: string }> {
+async function getRatingsFromGoogle(query: string): Promise<{ [key: string]: string }> {
     const headers = {
         'User-Agent': fakeUa()
     };
-
-    let response: AxiosResponse;
-    try {
-        response = await axiosInstance.get(`https://www.google.com/search?q=${encodeURIComponent(query)}`, { headers });
-    } catch (error: any) {
-        const axiosError = error as AxiosError;
-        if (axiosError.response == undefined ||
-            axiosError.request == undefined ||
-            axiosError.response.status != 429
-        ) {
-            throw error;
-        }
-        throw new Error('Google blocked');
-    }
-    const html = response.data;
-    const $ = cheerio.load(html);
+    const response = await fetchNetwork(`https://www.google.com/search?q=${encodeURIComponent(query)}`, 'axios', false);
+  
+    const $ = cheerio.load(response);
 
     let ratingsDiv = $('div.Ap5OSd').first();
     const ratingMap: { [key: string]: string } = {};
@@ -162,7 +144,7 @@ async function getRatingsFromGoogle(axiosInstance: AxiosInstance, query: string)
         ratings = ratingsText.split('\n').map(r => r.split('·')).filter(r => r.length > 1);
     }
     if (ratings.length === 0) {
-        throw new Error('Ratings not found');
+        throw new Error('Ratings not found from Google');
     }
     ratings.forEach(rating => {
         let source = rating[1].trim()
@@ -181,16 +163,14 @@ async function getRatingsFromGoogle(axiosInstance: AxiosInstance, query: string)
     return ratingMap;
 }
 
-async function getRatingsFromBing(axiosInstance: AxiosInstance, query: string): Promise<{ [key: string]: string }> {
+async function getRatingsFromBing(query: string): Promise<{ [key: string]: string }> {
     const headers = {
         'User-Agent': fakeUa()
     };
-
     query = query.replace(/ /g, '+');
     const url = `https://www.bing.com/search?q=${query}`;
-    const response = await axiosInstance.get(url, { headers });
-    const html = response.data;
-    const $ = cheerio.load(html);
+    const response = await fetchNetwork(url, 'axios', false);
+    const $ = cheerio.load(response);
 
 
     // get divs with tag l_ecrd_ratings_txt
@@ -217,15 +197,15 @@ async function getRatingsFromBing(axiosInstance: AxiosInstance, query: string): 
     return ratingMap;
 }
 
-async function getRatingsFromYahoo(axiosInstance: AxiosInstance, query: string): Promise<{ [key: string]: string }> {
+async function getRatingsFromYahoo(query: string): Promise<{ [key: string]: string }> {
     const headers = {
         'User-Agent': fakeUa()
     };
     const url = `https://search.yahoo.com/search?p=${query}`;
 
-    const response = await axiosInstance.get(url, { headers });
-    const html = response.data;
-    const $ = cheerio.load(html);
+    const response = await fetchNetwork(url, 'axios', false);
+    // const html = response.data;
+    const $ = cheerio.load(response);
     const ratingMap: { [key: string]: string } = {};
 
     // get span with class "rottenTomatoes"
@@ -264,11 +244,9 @@ function firstResolved<T>(promises: Promise<T>[]): Promise<T> {
 
 // Scrape ratings and get posters
 // async function scrapeRatings(imdbId: string, type: string, browser?: Browser, axiosInstance?: AxiosInstance): Promise<MetaDetail> {
-async function scrapeRatings(imdbId: string, type: string, axiosInstance?: AxiosInstance): Promise<MetaDetail> {
-    if (!axiosInstance) {
-        axiosInstance = await setProxy();
-    }
-    const metadata = await getMetadata(axiosInstance, imdbId, type);
+async function scrapeRatings(imdbId: string, type: string): Promise<MetaDetail> {
+
+    const metadata = await getMetadata(imdbId, type);
     try {
         const cleanTitle = metadata.name;
         let description = metadata.description || '';
@@ -283,15 +261,15 @@ async function scrapeRatings(imdbId: string, type: string, axiosInstance?: Axios
         let yahooFallback = false;
         try {
             ratingMap = await firstResolved([
-                getRatingsFromBing(axiosInstance, query),
-                getRatingsFromGoogle(axiosInstance, query),
+                getRatingsFromGoogle(query),
+                getRatingsFromBing(query),
             ]);
         } catch (error) {
             yahooFallback = true;
         }
 
         if (yahooFallback) {
-            ratingMap = await getRatingsFromYahoo(axiosInstance, query);
+            ratingMap = await getRatingsFromYahoo(query);
         }
 
         for (const [key, value] of Object.entries(ratingMap)) {
@@ -318,12 +296,11 @@ async function scrapeRatings(imdbId: string, type: string, axiosInstance?: Axios
 // Define the "meta" resource
 builder.defineMetaHandler(async (args: { id: string, type: string }) => {
     console.log('Received meta request:', args);
-    const axios = await setProxy();
     const { id, type } = args;
     let metadata: MetaDetail = {} as MetaDetail;
     if (id.startsWith('tt')) {
         const imdbId = id.split(':')[0];
-        metadata = await scrapeRatings(imdbId, type, axios);
+        metadata = await scrapeRatings(imdbId, type);
     }
 
     console.log('Finished meta request:', metadata);
@@ -335,7 +312,6 @@ const cinemeta_catalog = 'https://cinemeta-catalogs.strem.io';
 
 // Fetch trending catalog
 async function trendingCatalog(type: string, extra: any): Promise<any> {
-    const axios = await setProxy();
     const genre = extra?.genre || '';
     const skip = extra?.skip || 0;
     const url = `${cinemeta_catalog}/top/catalog/${type}/top/genre=${genre}&skip=${skip}.json`;
@@ -343,7 +319,7 @@ async function trendingCatalog(type: string, extra: any): Promise<any> {
     const response = await axios.get(url);
 
     response.data.metas = await Promise.all(response.data.metas.map(async (meta: MetaDetail) => {
-        const metadata = await scrapeRatings(meta.id, type, axios);
+        const metadata = await scrapeRatings(meta.id, type);
         return metadata;
     }));
     return response.data;
@@ -351,7 +327,6 @@ async function trendingCatalog(type: string, extra: any): Promise<any> {
 
 // Fetch discover catalog
 async function featuredCataloge(type: string, extra: any): Promise<any> {
-    const axios = await setProxy();
     const genre = extra?.genre || '';
     const skip = extra?.skip || 0;
     const url = `${cinemeta_catalog}/imdbRating/catalog/${type}/imdbRating/genre=${genre}&skip=${skip}.json`;
@@ -359,7 +334,7 @@ async function featuredCataloge(type: string, extra: any): Promise<any> {
     const response = await axios.get(url);
 
     response.data.metas = await Promise.all(response.data.metas.map(async (meta: MetaDetail) => {
-        const metadata = await scrapeRatings(meta.id, type, axios);
+        const metadata = await scrapeRatings(meta.id, type);
         return metadata;
     }));
     return response.data;
@@ -367,7 +342,6 @@ async function featuredCataloge(type: string, extra: any): Promise<any> {
 
 // Fetch search catalog
 async function searchCatalog(type: string, extra: any): Promise<any> {
-    const axios = await setProxy();
     const query = extra?.search || '';
     const skip = extra?.skip || 0;
     const url = `https://v3-cinemeta.strem.io/catalog/${type}/top/search=${query}&skip=${skip}.json`;
@@ -375,7 +349,7 @@ async function searchCatalog(type: string, extra: any): Promise<any> {
     const response = await axios.get(url);
 
     response.data.metas = await Promise.all(response.data.metas.map(async (meta: MetaDetail) => {
-        const metadata = await scrapeRatings(meta.id, type, axios);
+        const metadata = await scrapeRatings(meta.id, type);
         return metadata;
     }));
     return response.data;
@@ -383,13 +357,12 @@ async function searchCatalog(type: string, extra: any): Promise<any> {
 
 // Fetch the best year by year catalog
 async function bestYearByYearCatalog(type: string, extra: any): Promise<any> {
-    const axios = await setProxy();
     const year = extra?.genre || new Date().getFullYear();
     const skip = extra?.skip || 0;
     const response = await axios.get(`${cinemeta_catalog}/year/catalog/${type}/year/genre=${year}&skip=${skip}.json`);
 
     response.data.metas = await Promise.all(response.data.metas.map(async (meta: MetaDetail) => {
-        const metadata = await scrapeRatings(meta.id, type, axios);
+        const metadata = await scrapeRatings(meta.id, type);
         return metadata;
     }));
     return response.data;
