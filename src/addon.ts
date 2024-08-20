@@ -1,6 +1,6 @@
 import { addonBuilder, serveHTTP, Args, MetaDetail } from 'stremio-addon-sdk';
 import * as fs from 'fs';
-import axios, { AxiosError } from 'axios';
+import axios from 'axios';
 import sharp from 'sharp';
 import * as cheerio from 'cheerio';
 import * as dotenv from 'dotenv';
@@ -8,12 +8,15 @@ import * as path from 'path';
 import manifest from './manifest';
 import fakeUa from 'fake-useragent'
 import { fetchNetwork } from './network';
+import { createCacheClient } from './cache'
 
 // Load environment variables from .env file
 dotenv.config();
 
 // Create a new addon builder
 const builder = new addonBuilder(manifest);
+const cinemeta_catalog = 'https://cinemeta-catalogs.strem.io';
+
 
 async function addRatingToImage(base64String: string, ratingMap: { [key: string]: string }): Promise<string> {
     try {
@@ -132,7 +135,7 @@ async function getRatingsFromGoogle(query: string): Promise<{ [key: string]: str
         'User-Agent': fakeUa()
     };
     const response = await fetchNetwork(`https://www.google.com/search?q=${encodeURIComponent(query)}`, 'axios', false);
-  
+
     const $ = cheerio.load(response);
 
     let ratingsDiv = $('div.Ap5OSd').first();
@@ -246,6 +249,7 @@ function firstResolved<T>(promises: Promise<T>[]): Promise<T> {
 // async function scrapeRatings(imdbId: string, type: string, browser?: Browser, axiosInstance?: AxiosInstance): Promise<MetaDetail> {
 async function scrapeRatings(imdbId: string, type: string): Promise<MetaDetail> {
 
+    const cacheClient = await createCacheClient();
     const metadata = await getMetadata(imdbId, type);
     try {
         const cleanTitle = metadata.name;
@@ -256,24 +260,49 @@ async function scrapeRatings(imdbId: string, type: string): Promise<MetaDetail> 
             return metadata;
         }
 
-        const query = `${cleanTitle} - ${type}`;
+        // try to get ratings from cache
+        const ratingKeys = ['imdb', 'metacritic', 'rotten_tomatoes'];
         let ratingMap: { [key: string]: string } = {};
-        let yahooFallback = false;
-        try {
-            ratingMap = await firstResolved([
-                getRatingsFromGoogle(query),
-                getRatingsFromBing(query),
-            ]);
-        } catch (error) {
-            yahooFallback = true;
-        }
+        let isRatingCached = false;
+        ratingKeys.forEach(async (key) => {
+            if (cacheClient === null) {
+                return;
+            }
+            const cacheKey = `${imdbId}:${key}`;
+            const rating = await cacheClient.get(cacheKey);
+            if (rating) {
+                description += `(${key.replace("_", " ")}: ${rating}) `;
+                ratingMap[key] = rating;
+                isRatingCached = true;
+            }
+        });
+        if (!isRatingCached) {
 
-        if (yahooFallback) {
-            ratingMap = await getRatingsFromYahoo(query);
-        }
+            const query = `${cleanTitle} - ${type}`;
+            let yahooFallback = false;
+            try {
+                ratingMap = await firstResolved([
+                    getRatingsFromGoogle(query),
+                    getRatingsFromBing(query),
+                ]);
+            } catch (error) {
+                yahooFallback = true;
+            }
 
-        for (const [key, value] of Object.entries(ratingMap)) {
-            description += `(${key.replace("_", " ")}: ${value}) `;
+            if (yahooFallback) {
+                ratingMap = await getRatingsFromYahoo(query);
+            }
+
+            for (const [key, value] of Object.entries(ratingMap)) {
+                description += `(${key.replace("_", " ")}: ${value}) `;
+                // Cache the rating for 1 day
+                if (cacheClient === null) {
+                    continue;
+                }
+                const caccheKey = `${imdbId}:${key}`;
+                await cacheClient.set(caccheKey, value)
+                await cacheClient.expire(caccheKey, 86400);
+            }
         }
 
         if (metadata.poster) {
@@ -290,6 +319,10 @@ async function scrapeRatings(imdbId: string, type: string): Promise<MetaDetail> 
     } catch (error) {
         console.error(`Error fetching ratings: ${(error as Error).message}`);
         return metadata;
+    } finally {
+        if (cacheClient) {
+            cacheClient.disconnect();
+        }
     }
 }
 
@@ -308,7 +341,6 @@ builder.defineMetaHandler(async (args: { id: string, type: string }) => {
 });
 
 
-const cinemeta_catalog = 'https://cinemeta-catalogs.strem.io';
 
 // Fetch trending catalog
 async function trendingCatalog(type: string, extra: any): Promise<any> {
