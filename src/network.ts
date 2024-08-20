@@ -8,11 +8,14 @@ let currentProxyIndex = 0;
 let lastProxyFetchTime = 0;
 const proxyFetchInterval = 60 * 60 * 1000; // 1 hour in milliseconds
 let isFetchingProxies = false; // Lock to prevent concurrent fetches
+let isRotationPossible = true; // Flag to check if proxy rotation is possible
 let puppeteerQueue: Array<() => Promise<void>> = []; // Queue for Puppeteer requests
 let activePuppeteerRequests = 0; // Counter for active Puppeteer requests
 const MAX_PUPPETEER_REQUESTS = 2; // Maximum number of concurrent Puppeteer requests
 const TIMEOUT = 2000; // Timeout for network requests in milliseconds
-let axiosInstance = axios.create({timeout: TIMEOUT});
+const PROXY_LIST_LIMIT = 100; // Maximum number of proxies to fetch
+
+let axiosInstance: AxiosInstance = axios.create({ timeout: TIMEOUT });
 
 // Add an interceptor to rotate proxy on timeout or network errors
 function setupAxiosInterceptors(axiosInstance: AxiosInstance): AxiosInstance {
@@ -22,14 +25,20 @@ function setupAxiosInterceptors(axiosInstance: AxiosInstance): AxiosInstance {
             console.error('Axios error:', error.code, error.message);
             if (['ECONNABORTED', 'ECONNRESET', 'ETIMEDOUT', 'ERR_BAD_REQUEST'].includes(error.code) || error.code == undefined) {
                 console.warn('Request failed, rotating proxy...');
-                const newAxiosInstance = await rotateProxy(); // Get the new Axios instance after rotating
-                return newAxiosInstance!(error.config);
+                return isRotationPossible ? rotateProxyAndRetry(error) : Promise.reject(error);
             }
             return Promise.reject(error);
         }
     );
 
     return axiosInstance;
+}
+
+// Function to rotate the proxy and retry the failed request
+async function rotateProxyAndRetry(error: any): Promise<any> {
+    await rotateProxy();
+    const config = error.config;
+    return axiosInstance(config);
 }
 
 // Fetch and cache proxy list
@@ -54,6 +63,9 @@ async function fetchProxyList(): Promise<void> {
         const proxyData: string[] = response.data.split('\n');
         console.log('Fetched proxy data:', proxyData.length, 'proxies');
         proxyList = proxyData.map(proxy => proxy.trim().split(':').slice(0, 2).join(':')).filter(Boolean);
+        if (proxyList.length > PROXY_LIST_LIMIT) {
+            proxyList = proxyList.slice(0, PROXY_LIST_LIMIT);
+        }
         currentProxyIndex = 0;
         lastProxyFetchTime = Date.now();
     } catch (error) {
@@ -70,24 +82,20 @@ async function refreshProxyListIfNeeded(): Promise<void> {
     }
 }
 
-async function getAxiosInstance(useProxy: boolean): Promise<AxiosInstance> {
-    if (!useProxy) return axios.create({});
-
-    await refreshProxyListIfNeeded();
-    return setupAxiosInstanceWithProxy();
-}
-
-async function rotateProxy(): Promise<AxiosInstance> {
-    currentProxyIndex = (currentProxyIndex + 1) % proxyList.length;
-    if (currentProxyIndex === 0) {
-        return axios.create({timeout: TIMEOUT}); // Use default Axios instance without proxy
+// Rotate the proxy and update the existing axios instance
+async function rotateProxy(): Promise<void> {
+    currentProxyIndex++;
+    if (currentProxyIndex >= proxyList.length) {
+        console.log('All proxies exhausted. No more proxy rotation.');
+        isRotationPossible = false;
+        return;
     }
     console.log(`Rotated ${currentProxyIndex + 1}/${proxyList.length} proxies`);
-    return setupAxiosInstanceWithProxy(); // Return the updated Axios instance
+    setupAxiosInstanceWithProxy(); // Update the existing Axios instance with the new proxy
 }
 
 // Function to set up Axios instance with the current proxy
-async function setupAxiosInstanceWithProxy(): Promise<AxiosInstance> {
+function setupAxiosInstanceWithProxy(): void {
     console.log('Setting up Axios instance with proxy:', proxyList[currentProxyIndex]);
     const httpAgent = new HttpProxyAgent({
         proxy: `http://${proxyList[currentProxyIndex]}`
@@ -101,15 +109,18 @@ async function setupAxiosInstanceWithProxy(): Promise<AxiosInstance> {
         timeout: TIMEOUT
     });
 
-    axiosInstance = setupAxiosInterceptors(axiosInstance);
+    setupAxiosInterceptors(axiosInstance);
 
-    const response = await axiosInstance.get('https://api.ipify.org', {
+    axiosInstance.get('https://api.ipify.org', {
         headers: { 'User-Agent': fakeUa() },
         timeout: TIMEOUT
+    })
+    .then(response => {
+        console.log('Proxy success:', proxyList[currentProxyIndex], 'IP:', response.data);
+    })
+    .catch(error => {
+        console.error('Proxy failed:', error.message);
     });
-    console.log('Proxy success:', proxyList[currentProxyIndex], 'IP:', response.data);
-
-    return axiosInstance;
 }
 
 // Function to queue and manage Puppeteer requests
@@ -188,7 +199,7 @@ async function fetchNetwork(url: string, mode = 'axios', useProxy = false): Prom
         return await queuePuppeteerRequest(url, useProxy);
     }
     try {
-        const axiosInstance = await getAxiosInstance(useProxy);
+        await refreshProxyListIfNeeded();
         const response = await axiosInstance.get(url, {
             headers: { 'User-Agent': fakeUa() },
             timeout: TIMEOUT
