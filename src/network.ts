@@ -46,10 +46,12 @@ async function fetchProxyList(): Promise<void> {
         });
     }
 
+    const PROXY_URL = process.env.PROXY_URL || 'https://github.com/zloi-user/hideip.me/raw/main/https.txt'; 
+
     isFetchingProxies = true;
     try {
-        const response = await axios.get('https://github.com/zloi-user/hideip.me/raw/main/https.txt', { timeout: TIMEOUT });
-        let proxyData = response.data.split('\n');
+        const response = await axios.get(PROXY_URL, { headers: { 'User-Agent': fakeUa(), timeout: TIMEOUT } });
+        const proxyData: string[] = response.data.split('\n');
         console.log('Fetched proxy data:', proxyData.length, 'proxies');
         proxyList = proxyData.map(proxy => proxy.trim().split(':').slice(0, 2).join(':')).filter(Boolean);
         currentProxyIndex = 0;
