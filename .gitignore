@@ -2,3 +2,4 @@ node_modules
 .git_bak
 dist
 public
+.vscode

@@ -10,7 +10,7 @@ This Stremio addon fetches and displays ratings from multiple sources like IMDb,
 
 ## Screenshots
 
-![Screenshot 1](https://github.com/hexdecimal16/stremio-rating-addon/blob/main/assets/screenshot1.png)
+![Screenshot 1](https://github.com/hexdecimal16/stremio-rating-addon/blob/main/src/assets/screenshot1.png)
 
 ## Installation
 

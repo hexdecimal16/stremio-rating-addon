@@ -1,0 +1,2 @@
+export const MAX_PUPPETEER_REQUESTS = 2;
+export const NETWORK_TIMEOUT = 2000;

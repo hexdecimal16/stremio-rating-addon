@@ -2,7 +2,7 @@
   "name": "stremio-rating-addon",
   "version": "1.0.0",
   "description": "Adds IMDb, Rotten Tomatoes, and Metacritic ratings to posters in Stremio.",
-  "main": "src/addon.ts",
+  "main": "src/index.ts",
   "license": "MIT",
   "scripts": {
     "start": "nodemon",
