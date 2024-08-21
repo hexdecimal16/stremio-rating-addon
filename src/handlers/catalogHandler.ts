@@ -1,15 +1,21 @@
 import axios from 'axios';
-import { scrapeRatings } from '../utils/ratingScrapers';
+import { getRatingsfromDB, scrapeRatings } from '../utils/ratingScrapers';
 import { CINEMETA_BASE_URL, CINEMETA_CATALOG_URL } from '../constants/urls';
 import { closeCacheClient, getCacheClient } from '../cache';
 import { DEFAULT_PROVIDERS } from '../constants/costants';
+import { isDatabaseConnected } from '../repository';
 
 async function fetchCatalog(url: string, providers: string[]): Promise<any> {
     const response = await axios.get(url);
-    response.data.metas = await Promise.all(response.data.metas.map(async (meta: any) => {
-        return scrapeRatings(meta.id, meta.type, providers);
-    }));
-    return response.data;
+    if (isDatabaseConnected()) {
+        response.data.metas = await getRatingsfromDB(response.data.metas, providers);
+        return response.data;
+    } else {
+        response.data.metas = await Promise.all(response.data.metas.map(async (meta: any) => {
+            return scrapeRatings(meta.id, meta.type, providers);
+        }));
+        return response.data;
+    }
 }
 
 export async function trendingCatalog(type: string, extra: any, providers: string[]): Promise<any> {

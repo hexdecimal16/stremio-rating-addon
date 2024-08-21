@@ -4,6 +4,7 @@ import { fetchBingRatings, fetchGoogleRatings, fetchYahooRatings, getMetadata } 
 import { RedisClientType } from 'redis';
 import { addRatingToImage } from './image';
 import axios from 'axios';
+import { getRatingsfromTTIDs } from '../repository';
 
 export async function getRatingsFromGoogle(query: string, imdbId: string, cacheClient: RedisClientType | null): Promise<Record<string, string>> {
     try {
@@ -135,4 +136,37 @@ async function getRatingsFromCache(imdbId: string, cacheClient: RedisClientType 
     }
 
     return ratingMap;
+}
+
+
+export async function getRatingsfromDB(metas: MetaDetail[], providers: string[]): Promise<MetaDetail[]> {
+    const ttids = metas.map(meta => meta.id);
+    const ratings = await getRatingsfromTTIDs(ttids);
+
+    const modifiedMetaPromises = await metas.map(async meta => {
+        if (!ratings[meta.id]) {
+            return meta;
+        }
+
+        // update description with ratings
+        meta.description = meta.description || '';
+        let filteredRatings = {};
+
+        for (const [key, value] of Object.entries(ratings[meta.id])) {
+            if (providers.includes('all') || providers.includes(key)) {
+                meta.description += `(${key.replace('_', ' ')}: ${value}) `;
+                filteredRatings[key] = value;
+            }
+        }
+        
+        if (meta.poster && Object.keys(ratings[meta.id]).length > 0) {
+            const response = await axios.get(meta.poster, { responseType: 'arraybuffer' });
+            const posterBase64 = Buffer.from(response.data).toString('base64');
+            const modifiedPoster = await addRatingToImage(posterBase64, filteredRatings);
+            meta.poster = modifiedPoster;
+        }
+        return meta;
+    });
+
+    return await Promise.all(modifiedMetaPromises);
 }
