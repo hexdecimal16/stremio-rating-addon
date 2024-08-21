@@ -1,4 +1,5 @@
 import { Manifest } from "stremio-addon-sdk";
+import { Providers } from "./utils/filter";
 
 const manifest: Manifest = {
     id: "org.stremio.ratings",
@@ -189,7 +190,12 @@ const manifest: Manifest = {
                 }
             ]
         }
-    ]
+    ],
+    behaviorHints: {
+        configurable: true,
+        configurationRequired: true,
+    },
+    config: Providers,
 };
 
 

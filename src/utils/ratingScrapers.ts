@@ -68,7 +68,7 @@ export async function getRatingsFromYahoo(query: string, imdbId: string, cacheCl
     }
 }
 
-export async function scrapeRatings(imdbId: string, type: string): Promise<MetaDetail> {
+export async function scrapeRatings(imdbId: string, type: string, providers: string[]): Promise<MetaDetail> {
     const cacheClient = await getCacheClient();
     const metadata = await getMetadata(imdbId, type);
     let ratingMap: Record<string, string> = {};
@@ -93,15 +93,19 @@ export async function scrapeRatings(imdbId: string, type: string): Promise<MetaD
 
         // Update description with ratings
         metadata.description = metadata.description || '';
+        const filteredRatings: Record<string, string> = {};
         for (const [key, value] of Object.entries(ratingMap)) {
-            metadata.description += `(${key.replace('_', ' ')}: ${value}) `;
+            if (providers.includes('all') || providers.includes(key)) {
+                metadata.description += `(${key.replace('_', ' ')}: ${value}) `;
+                filteredRatings[key] = value;
+            }
         }
 
         // Modify the poster if available
         if (metadata.poster && Object.keys(ratingMap).length > 0) {
             const response = await axios.get(metadata.poster, { responseType: 'arraybuffer' });
             const posterBase64 = Buffer.from(response.data).toString('base64');
-            const modifiedPoster = await addRatingToImage(posterBase64, ratingMap);
+            const modifiedPoster = await addRatingToImage(posterBase64, filteredRatings);
             metadata.poster = modifiedPoster;
         }
 
