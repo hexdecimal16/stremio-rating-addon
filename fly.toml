@@ -1,11 +1,17 @@
-# fly.toml app configuration file generated for stremio-rating-addon on 2024-08-19T04:38:43+05:30
+# fly.toml app configuration file generated for stremio-rating-addon-twilight-glade-881 on 2024-08-21T04:52:00+05:30
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'stremio-rating-addon'
+app = 'stremio-rating-addon-twilight-glade-881'
+primary_region = 'sin'
 
 [build]
+  builtin = 'npm'
+  start_command = 'npm build'
+
+[deploy]
+  release_command = 'npm start'
 
 [http_service]
   internal_port = 3000
@@ -15,7 +21,12 @@ app = 'stremio-rating-addon'
   min_machines_running = 0
   processes = ['app']
 
+  [http_service.concurrency]
+    type = 'requests'
+    hard_limit = 250
+    soft_limit = 200
+
 [[vm]]
-  memory = '2gb'
+  memory = '1gb'
   cpu_kind = 'shared'
-  cpus = 1
+  cpus = 2
