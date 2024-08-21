@@ -37,7 +37,7 @@ export async function getRatingsfromTTIDs(ttids: string[]): Promise<Record<strin
         throw new Error('Not connected to database')
     }
     try {
-        const query = `SELECT ttid, ratings.provder, rating FROM ratings WHERE ttid = ANY($1)`
+        const query = `SELECT ttid, ratings.provider, rating FROM ratings WHERE ttid = ANY($1)`
         const { rows } = await client.query(query, [ttids])
         return rows.reduce((acc: Record<string, Record<string, string>>, row: any) => {
             if (!acc[row.ttid]) {
