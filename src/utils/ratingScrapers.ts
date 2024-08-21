@@ -15,6 +15,7 @@ export async function getRatingsFromGoogle(query: string, imdbId: string, cacheC
         // Cache the ratings if available
         for (const [key, value] of Object.entries(ratings)) {
             const cacheKey = `${imdbId}:${key}`;
+            console.log('Caching:', cacheKey, value);
             await cacheClient?.set(cacheKey, value);
             await cacheClient?.expire(cacheKey, 86400); // Cache for 1 day
         }
@@ -36,6 +37,7 @@ export async function getRatingsFromBing(query: string, imdbId: string, cacheCli
         // Cache the ratings if available
         for (const [key, value] of Object.entries(ratings)) {
             const cacheKey = `${imdbId}:${key}`;
+            console.log('Caching:', cacheKey, value);
             await cacheClient?.set(cacheKey, value);
             await cacheClient?.expire(cacheKey, 86400); // Cache for 1 day
         }
@@ -57,6 +59,7 @@ export async function getRatingsFromYahoo(query: string, imdbId: string, cacheCl
         // Cache the ratings if available
         for (const [key, value] of Object.entries(ratings)) {
             const cacheKey = `${imdbId}:${key}`;
+            console.log('Caching:', cacheKey, value);
             await cacheClient?.set(cacheKey, value);
             await cacheClient?.expire(cacheKey, 86400); // Cache for 1 day
         }
