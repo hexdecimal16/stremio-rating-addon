@@ -1,10 +1,10 @@
 import { MetaDetail } from 'stremio-addon-sdk';
-import { getCacheClient } from '../cache';
 import { fetchBingRatings, fetchGoogleRatings, fetchYahooRatings, getMetadata } from './api';
 import { RedisClientType } from 'redis';
 import { addRatingToImage } from './image';
 import axios from 'axios';
 import { getRatingsfromTTIDs } from '../repository';
+import { getContext } from '../context';
 
 export async function getRatingsFromGoogle(query: string, imdbId: string, cacheClient: RedisClientType | null): Promise<Record<string, string>> {
     try {
@@ -73,7 +73,8 @@ export async function getRatingsFromYahoo(query: string, imdbId: string, cacheCl
 }
 
 export async function scrapeRatings(imdbId: string, type: string, providers: string[]): Promise<MetaDetail> {
-    const cacheClient = await getCacheClient();
+
+    const cacheClient = getContext().cacheClient;
     const metadata = await getMetadata(imdbId, type);
     let ratingMap: Record<string, string> = {};
     try {

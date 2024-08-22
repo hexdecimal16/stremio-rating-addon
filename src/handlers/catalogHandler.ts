@@ -1,9 +1,9 @@
 import axios from 'axios';
 import { getRatingsfromDB, scrapeRatings } from '../utils/ratingScrapers';
 import { CINEMETA_BASE_URL, CINEMETA_CATALOG_URL } from '../constants/urls';
-import { closeCacheClient, getCacheClient } from '../cache';
 import { DEFAULT_PROVIDERS } from '../constants/costants';
 import { isDatabaseConnected } from '../repository';
+import { getContext } from '../context';
 
 async function fetchCatalog(url: string, providers: string[]): Promise<any> {
     const response = await axios.get(url);
@@ -38,17 +38,13 @@ export async function bestYearByYearCatalog(type: string, extra: any, providers:
     return fetchCatalog(url, providers);
 }
 
-export async function handleCatalogRequest({ id, type, extra, config }: any) {
+export async function handleCatalogRequest({ id, type, extra, config }: any): Promise<any> {
     let providers = DEFAULT_PROVIDERS;
     if (config && config.providers) {
         providers = config.providers;
     }
-    let cacheClient = await getCacheClient();
+    let cacheClient = await getContext().cacheClient;
     const key = id + JSON.stringify(extra);
-    if (cacheClient != null && !cacheClient.isOpen) {
-        console.log("Cache is not open, opening it again");
-        cacheClient = await getCacheClient();
-    }
     try {
         // Check if the response is cached
         const cachedResponse = await cacheClient?.get(key);
@@ -81,7 +77,5 @@ export async function handleCatalogRequest({ id, type, extra, config }: any) {
     } catch (error) {
         console.error("Error in CatalogHandler:", error);
         return { metas: [] };
-    } finally {
-        closeCacheClient();
     }
 }
