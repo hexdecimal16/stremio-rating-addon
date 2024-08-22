@@ -16,6 +16,7 @@ export const Providers: ManifestConfig[] = [{
         "peacock",
         "fandango",
         "ign",
+        "flick_filosopher",
     ] as any,
     default: 'all',
     required: true as any
