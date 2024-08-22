@@ -44,7 +44,7 @@ export async function handleCatalogRequest({ id, type, extra, config }: any): Pr
         providers = config.providers;
     }
     let cacheClient = await getContext().cacheClient;
-    const key = id + JSON.stringify(extra);
+    const key = id + "#" + type + "#" + JSON.stringify(extra) + "#" + JSON.stringify(config);
     try {
         // Check if the response is cached
         const cachedResponse = await cacheClient?.get(key);
