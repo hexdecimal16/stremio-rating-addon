@@ -87,7 +87,7 @@ function getSVGFilePath(key: string, value: string) {
     if (key === 'times_of_india') return path.join(__dirname, '../assets', 'toi.svg');
     if (key === 'ign') return path.join(__dirname, '../assets', 'ign.svg');
     if (key === 'peacock') return path.join(__dirname, '../assets', 'peacock.svg');
-    if (key === 'fandango.svg') return path.join(__dirname, '../assets', 'fandango.svg.svg');
+    if (key === 'fandango') return path.join(__dirname, '../assets', 'fandango.svg');
     if (key === 'flick_filosopher') return path.join(__dirname, '../assets', 'flick_filosopher.svg');
     if (key === 'rotten_tomatoes') return value > '60'
         ? path.join(__dirname, '../assets', 'rt_fresh.svg')
